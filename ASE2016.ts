@@ -1,93 +1,13 @@
-// src/algorithms/ase2016.ts - Enhanced ASE 2016 Algorithm
+// src/app/algorithms/ase2016/ASE2016.ts
 import {
-  Algorithm,
-  DecisionNode,
-  ResultNode,
-  ResultKey,
-  DecisionOption,
-  NextNodesMap
+  Algorithm
 } from "../../../types/algorithm";
 
-// Improved mapping function to handle all response types including 'unavailable'
-const mapFirstAlgoToSecondAlgo = (answers: Record<string, string>) => {
-  console.log("Mapping data from 1st to 2nd algorithm", answers);
-  
-  // Create deep copies to avoid reference issues
-  const updatedAnswers = { ...answers };
-  
-  // 1. Map E/e' ratio - transfer regardless of value
-  if (answers['standardStart'] !== undefined) {
-    if (answers['standardStart'] === 'positive' || 
-        answers['standardStart'] === 'positive_septal' || 
-        answers['standardStart'] === 'positive_lateral') {
-      updatedAnswers['dysfunctionStep2'] = 'positive';
-    } else if (answers['standardStart'] === 'negative') {
-      updatedAnswers['dysfunctionStep2'] = 'negative';
-    } else if (answers['standardStart'] === 'unavailable') {
-      updatedAnswers['dysfunctionStep2'] = 'unavailable';
-    }
-    console.log(`🔄 E/e' ratio mapped: ${answers['standardStart']} → ${updatedAnswers['dysfunctionStep2']}`);
-  }
-  
-  // 2. Map TR velocity - transfer regardless of value
-  if (answers['trVelocity'] !== undefined) {
-    updatedAnswers['dysfunctionTR'] = answers['trVelocity'];
-    console.log(`🔄 TR velocity mapped: ${answers['trVelocity']}`);
-  }
-  
-  // 3. Map LA volume - transfer regardless of value
-  if (answers['laVolume'] !== undefined) {
-    updatedAnswers['dysfunctionLA'] = answers['laVolume'];
-    console.log(`🔄 LA volume mapped: ${answers['laVolume']}`);
-  }
-  
-  // 4. Update the original answers object
-  Object.keys(updatedAnswers).forEach(key => {
-    answers[key] = updatedAnswers[key];
-  });
-  
-  console.log("✅ Final mapped data:", {
-    'Source E/e\'': answers['standardStart'],
-    'Target E/e\'': answers['dysfunctionStep2'],
-    'Source TR': answers['trVelocity'],
-    'Target TR': answers['dysfunctionTR'],
-    'Source LA': answers['laVolume'],
-    'Target LA': answers['dysfunctionLA']
-  });
-  
-  return answers;
-};
-
-// Helper function for creating standard decision nodes
-function createDecisionNode(
-  id: string,
-  question: string,
-  options: DecisionOption[],
-  nextNodes: NextNodesMap
-): DecisionNode {
-  return {
-    id,
-    type: "decision",
-    question,
-    options,
-    nextNodes,
-  };
-}
-
-// Helper function for creating result nodes
-function createResultNode(id: string, resultKey: ResultKey): ResultNode {
-  return {
-    id,
-    type: "result",
-    resultKey
-  };
-}
-
-// Define the ASE 2016 algorithm
 const ase2016Algorithm: Algorithm = {
   id: "ase2016",
   name: "ASE/EACVI Diastolic Function (2016)",
-  description: "Widely used algorithm for assessing diastolic function",
+  description:
+    "Recommendations for the Evaluation of Left Ventricular Diastolic Function by Echocardiography",
   citation: {
     authors: "Nagueh, S., Smiseth, O., Appleton, C. et al.",
     title:
@@ -103,26 +23,15 @@ const ase2016Algorithm: Algorithm = {
       description: "Complete assessment starting with LVEF evaluation",
       startNodeId: "initialAssessment",
     },
-    // {
-    //   id: "standard",
-    //   name: '"1st Algorithm" Only',
-    //   description: "For normal LV function",
-    //   startNodeId: "standardStart",
-    // },
-    // {
-    //   id: "dysfunction",
-    //   name: '"2nd Algorithm" Only',
-    //   description: "For reduced EF or myocardial disease with normal EF",
-    //   startNodeId: "dysfunctionStart",
-    // },
   ],
   startNodeId: "initialAssessment",
   nodes: {
-    // Initial assessment to determine which algorithm path to take
-    initialAssessment: createDecisionNode(
-      "initialAssessment",
-      "What is the left ventricular ejection fraction (LVEF)?",
-      [
+    // Initial assessment node - INPUT NODE
+    initialAssessment: {
+      id: "initialAssessment",
+      type: "input",
+      question: "What is the left ventricular ejection fraction (LVEF)?",
+      options: [
         {
           value: "normal",
           text: "Normal LVEF (≥50%) without myocardial disease",
@@ -133,20 +42,23 @@ const ase2016Algorithm: Algorithm = {
         },
         { value: "reduced", text: "Reduced LVEF (<50%)" },
       ],
-      {
-        normal: "standardStart",
-        reduced: "dysfunctionStart",
-        normal_with_disease: "dysfunctionStart",
-      }
-    ),
+      nextNodes: {
+        normal: "normalPath_EeRatio",
+        reduced: "reducedPath_MitralInflow",
+        normal_with_disease: "reducedPath_MitralInflow",
+      },
+    },
 
-    // Standard algorithm nodes (1st Algorithm)
-    standardStart: createDecisionNode(
-      "standardStart",
-      "What is the average E/e' ratio?",
-      [
+    // === NORMAL PATH NODES (LVEF ≥50% without myocardial disease) ===
+
+    // Input nodes for normal path
+    normalPath_EeRatio: {
+      id: "normalPath_EeRatio",
+      type: "input",
+      question: "What is the average E/e' ratio?",
+      options: [
         { value: "positive", text: "> 14" },
-        { value: "negative", text: "≤ 14 " },
+        { value: "negative", text: "≤ 14" },
         {
           value: "positive_septal",
           text: "Septal E/e' > 15 (only septal available)",
@@ -157,96 +69,92 @@ const ase2016Algorithm: Algorithm = {
         },
         { value: "unavailable", text: "Unavailable" },
       ],
-      {
-        "*": "eVelocity", // Go to next question regardless of answer
-      }
-    ),
+      nextNodes: { "*": "normalPath_EPrime" },
+    },
 
-    eVelocity: createDecisionNode(
-      "eVelocity",
-      "What are the e' velocities?",
-      [
+    normalPath_EPrime: {
+      id: "normalPath_EPrime",
+      type: "input",
+      question: "What are the e' velocities?",
+      options: [
         { value: "negative", text: "Septal ≥ 7 AND Lateral ≥ 10 cm/s" },
         { value: "positive", text: "Septal < 7 OR Lateral < 10 cm/s" },
         { value: "unavailable", text: "Unavailable" },
       ],
-      {
-        "*": "trVelocity", // Go to next question regardless of answer
-      }
-    ),
+      nextNodes: { "*": "normalPath_TRVelocity" },
+    },
 
-    trVelocity: createDecisionNode(
-      "trVelocity",
-      "What is the TR Velocity?",
-      [
+    normalPath_TRVelocity: {
+      id: "normalPath_TRVelocity",
+      type: "input",
+      question: "What is the TR Velocity?",
+      options: [
         { value: "positive", text: ">2.8 m/s" },
         { value: "negative", text: "≤ 2.8 m/s" },
         { value: "unavailable", text: "Unavailable" },
       ],
-      {
-        "*": "laVolume", // Go to next question regardless of answer
-      }
-    ),
+      nextNodes: { "*": "normalPath_LAVolume" },
+    },
 
-    laVolume: createDecisionNode(
-      "laVolume",
-      "What is the indexed LA Volume?",
-      [
+    normalPath_LAVolume: {
+      id: "normalPath_LAVolume",
+      type: "input",
+      question: "What is the indexed LA Volume?",
+      options: [
         { value: "positive", text: ">34 ml/m²" },
         { value: "negative", text: "≤ 34 ml/m²" },
         { value: "unavailable", text: "Unavailable" },
       ],
-      {
-        "*": "standardEvaluate", // Go to evaluation node
-      }
-    ),
+      nextNodes: { "*": "normalPath_Evaluate" },
+    },
 
-    standardEvaluate: {
-      id: "standardEvaluate",
-      type: "evaluator",
+    // Logic node for normal path - EVALUATOR NODE
+    normalPath_Evaluate: {
+      id: "normalPath_Evaluate",
+      type: "logic",
       evaluate: (answers: Record<string, string>) => {
-        // Count standard positive/negative criteria
+        // Count positive/negative criteria
         let positives = 0;
         let negatives = 0;
         let unavailables = 0;
 
         // Evaluate E/e' ratio including special cases for septal/lateral only
         if (
-          answers["standardStart"] === "positive" ||
-          answers["standardStart"] === "positive_septal" ||
-          answers["standardStart"] === "positive_lateral"
+          answers["normalPath_EeRatio"] === "positive" ||
+          answers["normalPath_EeRatio"] === "positive_septal" ||
+          answers["normalPath_EeRatio"] === "positive_lateral"
         ) {
           positives++;
-        } else if (answers["standardStart"] === "negative") {
+        } else if (answers["normalPath_EeRatio"] === "negative") {
           negatives++;
-        } else if (answers["standardStart"] === "unavailable") {
+        } else if (answers["normalPath_EeRatio"] === "unavailable") {
           unavailables++;
         }
 
-        // Evaluate e' velocity
-        if (answers["eVelocity"] === "positive") {
+        // Evaluate e' velocities
+        if (answers["normalPath_EPrime"] === "positive") {
           positives++;
-        } else if (answers["eVelocity"] === "negative") {
+        } else if (answers["normalPath_EPrime"] === "negative") {
           negatives++;
-        } else if (answers["eVelocity"] === "unavailable") {
+        } else if (answers["normalPath_EPrime"] === "unavailable") {
           unavailables++;
         }
 
         // Evaluate TR velocity
-        if (answers["trVelocity"] === "positive") {
+        if (answers["normalPath_TRVelocity"] === "positive") {
           positives++;
-        } else if (answers["trVelocity"] === "negative") {
+        } else if (answers["normalPath_TRVelocity"] === "negative") {
           negatives++;
-        } else if (answers["trVelocity"] === "unavailable") {
+        } else if (answers["normalPath_TRVelocity"] === "unavailable") {
           unavailables++;
         }
 
         // Evaluate LA volume
-        if (answers["laVolume"] === "positive") {
+        if (answers["normalPath_LAVolume"] === "positive") {
           positives++;
-        } else if (answers["laVolume"] === "negative") {
+        } else if (answers["normalPath_LAVolume"] === "negative") {
           negatives++;
-        } else if (answers["laVolume"] === "unavailable") {
+        } else if (answers["normalPath_LAVolume"] === "unavailable") {
           unavailables++;
         }
 
@@ -257,97 +165,78 @@ const ase2016Algorithm: Algorithm = {
         if (negatives > availableParams / 2) {
           return "resultNormal";
         } else if (positives > availableParams / 2) {
-          // This is where we bridge to the 2nd algorithm if we started with the first
-          if (answers["initialAssessment"] === "normal") {
-            return "transitionToDysfunction";
-          } else {
-            return "resultImpairedElevated";
-          }
+          // If more positives, transition to the reduced path but start with mitral inflow
+          return "reducedPath_MitralInflow";
         } else {
           return "resultIndeterminate";
         }
       },
     },
 
-    // Transition node to 2nd algorithm - changed to evaluator
-    transitionToDysfunction: {
-      id: 'transitionToDysfunction',
-      type: 'evaluator',
-      evaluate: (answers: Record<string, string>) => {
-        console.log("➡️ Starting transition to dysfunction with:", answers);
-        
-        // Map data from first algorithm to second
-        mapFirstAlgoToSecondAlgo(answers);
-        
-        // Proceed to dysfunction algorithm
-        return 'dysfunctionStart';
-      }
-    },
+    // === REDUCED/DYSFUNCTION PATH NODES (LVEF <50% OR myocardial disease) ===
 
-    // Dysfunction algorithm nodes (2nd Algorithm)
-    dysfunctionStart: createDecisionNode(
-      "dysfunctionStart",
-      "What is the Mitral Inflow Pattern (E/A ratio)?",
-      [
+    // Input node for reduced/dysfunction path
+    reducedPath_MitralInflow: {
+      id: "reducedPath_MitralInflow",
+      type: "input",
+      question: "What is the Mitral Inflow Pattern (E/A ratio)?",
+      options: [
         { value: "gte2", text: "E/A ≥ 2" },
         { value: "mid_range", text: "E/A between 0.8 and 1.99" },
         { value: "lt08_high_e", text: "E/A ≤ 0.8 AND E > 50 cm/s" },
         { value: "lt08_low_e", text: "E/A ≤ 0.8 AND E ≤ 50 cm/s" },
       ],
-      {
+      nextNodes: {
         gte2: "resultGrade3",
         lt08_low_e: "resultGrade1",
-        lt08_high_e: "checkExistingAnswers",
-        mid_range: "checkExistingAnswers",
-      }
-    ),
-
-    // Modified evaluator node to check for existing answers
-    checkExistingAnswers: {
-      id: 'checkExistingAnswers',
-      type: 'evaluator',
-      evaluate: (answers: Record<string, string>) => {
-        console.log("➡️ Starting checkExistingAnswers with:", answers);
-        
-        // First, map any existing data
-        mapFirstAlgoToSecondAlgo(answers);
-        
-        // Now check which parameters have been answered, regardless of their value
-        // What matters is whether the question was answered, not what the answer was
-        const wasEeRatioAnswered = answers['dysfunctionStep2'] !== undefined;
-        const wasTrVelocityAnswered = answers['dysfunctionTR'] !== undefined;
-        const wasLaVolumeAnswered = answers['dysfunctionLA'] !== undefined;
-        
-        console.log(`⚙️ After mapping: E/e' answered: ${wasEeRatioAnswered}, TR answered: ${wasTrVelocityAnswered}, LA vol answered: ${wasLaVolumeAnswered}`);
-        
-        // If we already have all parameters answered, go straight to evaluation
-        if (wasEeRatioAnswered && wasTrVelocityAnswered && wasLaVolumeAnswered) {
-          console.log("✅ All parameters answered, proceeding to evaluation");
-          return 'dysfunctionEvaluate';
-        }
-        
-        // Route to collect only unanswered parameters
-        if (!wasEeRatioAnswered) {
-          console.log("⚠️ E/e' not answered, routing to collection");
-          return 'dysfunctionStep2';
-        } else if (!wasTrVelocityAnswered) {
-          console.log("⚠️ TR velocity not answered, routing to collection");
-          return 'dysfunctionTR';
-        } else if (!wasLaVolumeAnswered) {
-          console.log("⚠️ LA volume not answered, routing to collection");
-          return 'dysfunctionLA';
-        } else {
-          // Fallback - shouldn't reach here
-          console.log("⚠️ Unexpected state, defaulting to evaluation");
-          return 'dysfunctionEvaluate';
-        }
-      }
+        lt08_high_e: "reducedPath_CheckParameterAvailability",
+        mid_range: "reducedPath_CheckParameterAvailability",
+      },
     },
 
-    dysfunctionStep2: createDecisionNode(
-      "dysfunctionStep2",
-      "What is the average E/e' ratio?",
-      [
+    // Logic node to check if we need to ask for parameters or use existing ones
+    reducedPath_CheckParameterAvailability: {
+      id: "reducedPath_CheckParameterAvailability",
+      type: "logic",
+      evaluate: (answers: Record<string, string>) => {
+        // Check if we already have answers from normal path
+        const hasEeRatio =
+          answers["normalPath_EeRatio"] !== undefined &&
+          answers["normalPath_EeRatio"] !== "unavailable";
+
+        const hasTRVelocity =
+          answers["normalPath_TRVelocity"] !== undefined &&
+          answers["normalPath_TRVelocity"] !== "unavailable";
+
+        const hasLAVolume =
+          answers["normalPath_LAVolume"] !== undefined &&
+          answers["normalPath_LAVolume"] !== "unavailable";
+
+        // If we have all parameters, we can skip to evaluation
+        if (hasEeRatio && hasTRVelocity && hasLAVolume) {
+          return "reducedPath_Evaluate";
+        }
+
+        // Otherwise, ask for missing parameters
+        if (!hasEeRatio) {
+          return "reducedPath_EeRatio";
+        } else if (!hasTRVelocity) {
+          return "reducedPath_TRVelocity";
+        } else if (!hasLAVolume) {
+          return "reducedPath_LAVolume";
+        } else {
+          // Shouldn't reach here, but fallback
+          return "reducedPath_Evaluate";
+        }
+      },
+    },
+
+    // Additional input nodes for missing parameters
+    reducedPath_EeRatio: {
+      id: "reducedPath_EeRatio",
+      type: "input",
+      question: "What is the average E/e' ratio?",
+      options: [
         { value: "positive", text: "> 14" },
         {
           value: "positive_septal",
@@ -363,189 +252,196 @@ const ase2016Algorithm: Algorithm = {
         },
         { value: "unavailable", text: "Unavailable" },
       ],
-      {
-        "*": "dysfunctionTR", // Go to next question regardless of answer
-      }
-    ),
+      nextNodes: {
+        "*": "reducedPath_CheckTRAvailability",
+      },
+    },
 
-    dysfunctionTR: createDecisionNode(
-      "dysfunctionTR",
-      "What is the TR Velocity?",
-      [
-        { value: "positive", text: "> 2.8 m/s" },
-        { value: "negative", text: "≤ 2.8 m/s" },
-        { value: "unavailable", text: "Unavailable" },
-      ],
-      {
-        "*": "dysfunctionLA", // Go to next question regardless of answer
-      }
-    ),
-
-    dysfunctionLA: createDecisionNode(
-      "dysfunctionLA",
-      "What is the indexed LA Volume?",
-      [
-        { value: "positive", text: "> 34 ml/m²" },
-        { value: "negative", text: "≤ 34 ml/m²" },
-        { value: "unavailable", text: "Unavailable" },
-      ],
-      {
-        "*": "checkDysfunctionPVFlow", // Check if we need PV flow data
-      }
-    ),
-
-    // Check if we need pulmonary vein flow data for reduced LVEF patients
-    checkDysfunctionPVFlow: {
-      id: "checkDysfunctionPVFlow",
-      type: "evaluator",
+    // Logic node to check TR availability
+    reducedPath_CheckTRAvailability: {
+      id: "reducedPath_CheckTRAvailability",
+      type: "logic",
       evaluate: (answers: Record<string, string>) => {
-        console.log("➡️ Checking if PV flow is needed:", answers);
-        
-        // Check if any parameter is unavailable
-        const hasUnavailable =
-          answers["dysfunctionStep2"] === "unavailable" ||
-          answers["dysfunctionTR"] === "unavailable" ||
-          answers["dysfunctionLA"] === "unavailable";
-        
-        // Determine if we came from the reduced EF path directly
-        // This includes both direct entry to dysfunction algo AND transition from 1st algo
-        const isReducedEF = 
-          answers["initialAssessment"] === "reduced";
-        
-        // Determine if we have myocardial disease with normal EF
-        const isNormalEFWithDisease = 
-          answers["initialAssessment"] === "normal_with_disease";
-        
-        console.log(`⚙️ Has unavailable parameter: ${hasUnavailable}, Reduced EF: ${isReducedEF}, Normal EF with disease: ${isNormalEFWithDisease}`);
-        
-        // Only ask for PV S/D ratio if:
-        // 1. We have a truly reduced EF (< 50%)
-        // 2. AND at least one parameter is unavailable
-        if (hasUnavailable && isReducedEF) {
-          console.log("✅ Proceeding to PV flow assessment (reduced EF with unavailable parameter)");
-          return "dysfunctionPVFlow";
+        const hasTRVelocity =
+          answers["normalPath_TRVelocity"] !== undefined &&
+          answers["normalPath_TRVelocity"] !== "unavailable";
+
+        if (hasTRVelocity) {
+          return "reducedPath_CheckLAAvailability";
         } else {
-          console.log("✅ Skipping PV flow, proceeding to evaluation");
-          return "dysfunctionEvaluate";
+          return "reducedPath_TRVelocity";
         }
       },
     },
 
-    dysfunctionPVFlow: createDecisionNode(
-      "dysfunctionPVFlow",
-      "What is the pulmonary vein S/D ratio?",
-      [
+    reducedPath_TRVelocity: {
+      id: "reducedPath_TRVelocity",
+      type: "input",
+      question: "What is the TR Velocity?",
+      options: [
+        { value: "positive", text: "> 2.8 m/s" },
+        { value: "negative", text: "≤ 2.8 m/s" },
+        { value: "unavailable", text: "Unavailable" },
+      ],
+      nextNodes: {
+        "*": "reducedPath_CheckLAAvailability",
+      },
+    },
+
+    // Logic node to check LA availability
+    reducedPath_CheckLAAvailability: {
+      id: "reducedPath_CheckLAAvailability",
+      type: "logic",
+      evaluate: (answers: Record<string, string>) => {
+        const hasLAVolume =
+          answers["normalPath_LAVolume"] !== undefined &&
+          answers["normalPath_LAVolume"] !== "unavailable";
+
+        if (hasLAVolume) {
+          return "reducedPath_CheckPVFlowNeed";
+        } else {
+          return "reducedPath_LAVolume";
+        }
+      },
+    },
+
+    reducedPath_LAVolume: {
+      id: "reducedPath_LAVolume",
+      type: "input",
+      question: "What is the indexed LA Volume?",
+      options: [
+        { value: "positive", text: "> 34 ml/m²" },
+        { value: "negative", text: "≤ 34 ml/m²" },
+        { value: "unavailable", text: "Unavailable" },
+      ],
+      nextNodes: {
+        "*": "reducedPath_CheckPVFlowNeed",
+      },
+    },
+
+    // Logic node to check if PV flow assessment is needed
+    reducedPath_CheckPVFlowNeed: {
+      id: "reducedPath_CheckPVFlowNeed",
+      type: "logic",
+      evaluate: (answers: Record<string, string>) => {
+        // Determine which E/e' result to use
+        const eeRatio =
+          answers["reducedPath_EeRatio"] || answers["normalPath_EeRatio"];
+        const trVelocity =
+          answers["reducedPath_TRVelocity"] || answers["normalPath_TRVelocity"];
+        const laVolume =
+          answers["reducedPath_LAVolume"] || answers["normalPath_LAVolume"];
+
+        // Check if any parameter is unavailable
+        const hasUnavailable =
+          eeRatio === "unavailable" ||
+          trVelocity === "unavailable" ||
+          laVolume === "unavailable";
+
+        // Only ask for PV flow if:
+        // 1. User came directly from reduced LVEF path (not from normal path)
+        // 2. AND at least one parameter is unavailable
+        const isReducedEF = answers["initialAssessment"] === "reduced";
+
+        if (hasUnavailable && isReducedEF) {
+          return "reducedPath_PVFlow";
+        } else {
+          return "reducedPath_Evaluate";
+        }
+      },
+    },
+
+    reducedPath_PVFlow: {
+      id: "reducedPath_PVFlow",
+      type: "input",
+      question: "What is the pulmonary vein S/D ratio?",
+      options: [
         { value: "negative", text: "≥ 1" },
         { value: "positive", text: "< 1" },
         { value: "unavailable", text: "Unavailable" },
       ],
-      {
-        "*": "dysfunctionEvaluate", // Now go to dysfunction evaluator, not standard evaluator
-      }
-    ),
+      nextNodes: {
+        "*": "reducedPath_Evaluate",
+      },
+    },
 
-    dysfunctionEvaluate: {
-      id: "dysfunctionEvaluate",
-      type: "evaluator",
+    // Logic node for final evaluation
+    reducedPath_Evaluate: {
+      id: "reducedPath_Evaluate",
+      type: "logic",
       evaluate: (answers: Record<string, string>) => {
-        // Log answers to help with debugging
-        console.log("All available answers for evaluation:", answers);
-    
-        // Get only the answers from step2 onwards
-        const step2Answers: Record<string, string> = {
-          dysfunctionStep2: "unavailable",
-          dysfunctionTR: "unavailable",
-          dysfunctionLA: "unavailable",
-        };
-    
-        // Map standardStart (E/e') to dysfunctionStep2 if available
-        if (
-          answers["dysfunctionStep2"] &&
-          answers["dysfunctionStep2"] !== "unavailable"
-        ) {
-          step2Answers["dysfunctionStep2"] = answers["dysfunctionStep2"];
-          console.log(
-            "Using directly provided dysfunctionStep2:",
-            answers["dysfunctionStep2"]
-          );
-        } else if (
-          answers["standardStart"] &&
-          answers["standardStart"] !== "unavailable"
-        ) {
-          if (
-            answers["standardStart"] === "positive" ||
-            answers["standardStart"] === "positive_septal" ||
-            answers["standardStart"] === "positive_lateral"
-          ) {
-            step2Answers["dysfunctionStep2"] = "positive";
-            console.log("Mapped standardStart to positive");
-          } else if (answers["standardStart"] === "negative") {
-            step2Answers["dysfunctionStep2"] = "negative";
-            console.log("Mapped standardStart to negative");
-          }
+        // Determine which results to use - prefer dysfunction path if available
+        const mitralInflow = answers["reducedPath_MitralInflow"];
+        const eeRatio =
+          answers["reducedPath_EeRatio"] ||
+          answers["normalPath_EeRatio"] ||
+          "unavailable";
+        const trVelocity =
+          answers["reducedPath_TRVelocity"] ||
+          answers["normalPath_TRVelocity"] ||
+          "unavailable";
+        const laVolume =
+          answers["reducedPath_LAVolume"] ||
+          answers["normalPath_LAVolume"] ||
+          "unavailable";
+        const pvFlow = answers["reducedPath_PVFlow"] || "unavailable";
+
+        // For certain mitral inflow patterns, grade is determined directly
+        if (mitralInflow === "gte2") {
+          return "resultGrade3";
+        } else if (mitralInflow === "lt08_low_e") {
+          return "resultGrade1";
         }
-    
-        // Map TR velocity
-        if (
-          answers["dysfunctionTR"] &&
-          answers["dysfunctionTR"] !== "unavailable"
-        ) {
-          step2Answers["dysfunctionTR"] = answers["dysfunctionTR"];
-          console.log("Using directly provided dysfunctionTR");
-        } else if (
-          answers["trVelocity"] &&
-          answers["trVelocity"] !== "unavailable"
-        ) {
-          step2Answers["dysfunctionTR"] = answers["trVelocity"];
-          console.log("Mapped trVelocity to dysfunctionTR");
-        }
-    
-        // Map LA volume
-        if (
-          answers["dysfunctionLA"] &&
-          answers["dysfunctionLA"] !== "unavailable"
-        ) {
-          step2Answers["dysfunctionLA"] = answers["dysfunctionLA"];
-          console.log("Using directly provided dysfunctionLA");
-        } else if (
-          answers["laVolume"] &&
-          answers["laVolume"] !== "unavailable"
-        ) {
-          step2Answers["dysfunctionLA"] = answers["laVolume"];
-          console.log("Mapped laVolume to dysfunctionLA");
-        }
-    
-        // Include pulmonary vein S/D ratio - BEFORE counting positives/negatives
-        // This way the PV information is already in step2Answers when we do the counting
-        if (answers["dysfunctionPVFlow"] === "positive") {
-          step2Answers["pv_sd_ratio"] = "positive";
-          console.log("✅ Added positive PV S/D ratio (< 1)");
-        } else if (answers["dysfunctionPVFlow"] === "negative") {
-          step2Answers["pv_sd_ratio"] = "negative"; 
-          console.log("✅ Added negative PV S/D ratio (≥ 1)");
-        }
-    
-        console.log("Final step 2 answers being evaluated:", step2Answers);
-    
-        // Count positives, negatives, and unavailables
+
+        // For mid-range E/A or E/A ≤ 0.8 with E > 50 cm/s, we need to evaluate other criteria
+
+        // Count positive and negative results
         let positives = 0;
         let negatives = 0;
-        let unavailables = 0;
-    
+        let availables = 0;
+
         // Evaluate each parameter
-        Object.entries(step2Answers).forEach(([key, answer]) => {
-          console.log(`Evaluating ${key}: ${answer}`);
-          if (answer === "positive") positives++;
-          else if (answer === "negative") negatives++;
-          else if (answer === "unavailable") unavailables++;
-        });
-    
-        const availables = Object.keys(step2Answers).length - unavailables;
-    
-        console.log(
-          `Final counts: positives=${positives}, negatives=${negatives}, availables=${availables}`
-        );
-    
+        if (eeRatio !== "unavailable") {
+          availables++;
+          if (
+            eeRatio === "positive" ||
+            eeRatio === "positive_septal" ||
+            eeRatio === "positive_lateral"
+          ) {
+            positives++;
+          } else {
+            negatives++;
+          }
+        }
+
+        if (trVelocity !== "unavailable") {
+          availables++;
+          if (trVelocity === "positive") {
+            positives++;
+          } else {
+            negatives++;
+          }
+        }
+
+        if (laVolume !== "unavailable") {
+          availables++;
+          if (laVolume === "positive") {
+            positives++;
+          } else {
+            negatives++;
+          }
+        }
+
+        // Include PV flow if available
+        if (pvFlow !== "unavailable") {
+          availables++;
+          if (pvFlow === "positive") {
+            positives++;
+          } else {
+            negatives++;
+          }
+        }
+
         // Make decision based on available data
         if (availables >= 3) {
           if (positives >= 2) {
@@ -569,23 +465,37 @@ const ase2016Algorithm: Algorithm = {
       },
     },
 
-    // Result nodes
-    resultNormal: createResultNode("resultNormal", "normal"),
-    resultGrade1: createResultNode("resultGrade1", "grade-1"),
-    resultGrade2: createResultNode("resultGrade2", "grade-2"),
-    resultGrade3: createResultNode("resultGrade3", "grade-3"),
-    resultImpairedElevated: createResultNode(
-      "resultImpairedElevated",
-      "impaired-elevated"
-    ),
-    resultIndeterminate: createResultNode(
-      "resultIndeterminate",
-      "indeterminate"
-    ),
-    resultInsufficientInfo: createResultNode(
-      "resultInsufficientInfo",
-      "insufficient_info"
-    ),
+    // === RESULT NODES ===
+    resultNormal: {
+      id: "resultNormal",
+      type: "result",
+      resultKey: "normal",
+    },
+    resultGrade1: {
+      id: "resultGrade1",
+      type: "result",
+      resultKey: "grade-1",
+    },
+    resultGrade2: {
+      id: "resultGrade2",
+      type: "result",
+      resultKey: "grade-2",
+    },
+    resultGrade3: {
+      id: "resultGrade3",
+      type: "result",
+      resultKey: "grade-3",
+    },
+    resultIndeterminate: {
+      id: "resultIndeterminate",
+      type: "result",
+      resultKey: "indeterminate",
+    },
+    resultInsufficientInfo: {
+      id: "resultInsufficientInfo",
+      type: "result",
+      resultKey: "insufficient_info",
+    },
   },
 };
 
